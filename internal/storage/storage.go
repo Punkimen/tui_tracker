@@ -15,6 +15,8 @@ type Storage interface {
 
 	SaveEntry(e model.Entry) error
 	GetEntries() ([]model.Entry, error)
+	GetEntriesByMonth(year int, month time.Month) ([]model.Entry, error)
 	UpdateEntry(id int64, value float64) (model.Entry, error)
+	UpsertEntry(habitID int64, date time.Time, value float64) error
 	DeleteEntry(id int64) error
 }

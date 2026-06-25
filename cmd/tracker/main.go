@@ -1,8 +1,12 @@
 package main
 
 import (
+	"fmt"
+	"os"
+
 	"log"
 
+	tea "charm.land/bubbletea/v2"
 	"daily-tracker/internal/storage"
 	"daily-tracker/internal/tracker"
 	"daily-tracker/internal/ui"
@@ -15,12 +19,11 @@ func main() {
 	}
 
 	t := tracker.New(db)
-	_ = t
+	app := ui.NewApp(t)
 
-	ui.GetAllDaysInMonth(6)
-	// p := tea.NewProgram(ui.InitialModel())
-	// if _, err = p.Run(); err != nil {
-	// 	fmt.Printf("Alas, there error: %v", err)
-	// 	os.Exit(1)
-	// }
+	p := tea.NewProgram(app)
+	if _, err = p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }

@@ -2,6 +2,7 @@
 package tracker
 
 import (
+	"fmt"
 	"time"
 
 	"daily-tracker/internal/model"
@@ -105,4 +106,23 @@ func (t *Tracker) UpdateEntry(id int64, value float64) (model.Entry, error) {
 // DeleteEntry удаляет запись по id.
 func (t *Tracker) DeleteEntry(id int64) error {
 	return t.storage.DeleteEntry(id)
+}
+
+// GetEntriesMap returns entries for a given month as a map keyed by "habitID-YYYY-MM-DD".
+func (t *Tracker) GetEntriesMap(year int, month time.Month) (map[string]float64, error) {
+	entries, err := t.storage.GetEntriesByMonth(year, month)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]float64, len(entries))
+	for _, e := range entries {
+		key := fmt.Sprintf("%d-%04d-%02d-%02d", e.HabitID, e.Date.Year(), int(e.Date.Month()), e.Date.Day())
+		m[key] = e.Value
+	}
+	return m, nil
+}
+
+// UpsertEntry creates or updates an entry for a habit on a given date.
+func (t *Tracker) UpsertEntry(habitID int64, date time.Time, value float64) error {
+	return t.storage.UpsertEntry(habitID, date, value)
 }

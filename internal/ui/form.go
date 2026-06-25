@@ -1,73 +1,116 @@
-// Package ui bubbletea TUI interface
 package ui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"daily-tracker/internal/model"
 )
 
+type formStep int
+
+const (
+	formStepName formStep = iota
+	formStepType
+)
+
+// FormModel is a two-step form: enter name, then pick type.
+// It is not a standalone tea.Model — AppModel drives it.
 type FormModel struct {
-	choices  []string         // items on the to-do list
-	cursor   int              // which to-do list item our cursor is pointing at
-	selected map[int]struct{} // which to-do items are selected
+	step      formStep
+	name      string
+	typeIdx   int
+	confirmed bool
 }
 
-func InitialModel() FormModel {
-	return FormModel{
-		choices:  []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
-		selected: make(map[int]struct{}),
+var habitTypes = []model.HabitType{
+	model.HabitCount,
+	model.HabitProgress,
+	model.HabitMinutes,
+}
+
+func newFormModel() FormModel {
+	return FormModel{}
+}
+
+func (f FormModel) selectedType() model.HabitType {
+	return habitTypes[f.typeIdx]
+}
+
+// update returns (updated, done). done=true means the form is finished.
+func (f FormModel) update(msg tea.Msg) (FormModel, bool) {
+	keyMsg, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return f, false
 	}
+
+	if keyMsg.String() == "esc" {
+		return f, true
+	}
+
+	switch f.step {
+	case formStepName:
+		switch keyMsg.String() {
+		case "enter":
+			if strings.TrimSpace(f.name) != "" {
+				f.step = formStepType
+			}
+		case "backspace":
+			if len(f.name) > 0 {
+				f.name = f.name[:len(f.name)-1]
+			}
+		default:
+			s := keyMsg.String()
+			if len(s) == 1 {
+				f.name += s
+			}
+		}
+
+	case formStepType:
+		switch keyMsg.String() {
+		case "enter":
+			f.confirmed = true
+			return f, true
+		case "left", "h":
+			if f.typeIdx > 0 {
+				f.typeIdx--
+			}
+		case "right", "l":
+			if f.typeIdx < len(habitTypes)-1 {
+				f.typeIdx++
+			}
+		}
+	}
+
+	return f, false
 }
 
-func (m FormModel) Init() tea.Cmd {
-	return nil
-}
+func (f FormModel) view() string {
+	var b strings.Builder
+	b.WriteString("\n  Create New Habit\n")
+	b.WriteString("  ─────────────────\n\n")
 
-func (m FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case "down", "j":
-			if m.cursor < len(m.choices)-1 {
-				m.cursor++
-			}
-		case "enter", "space":
-			_, ok := m.selected[m.cursor]
-			if ok {
-				delete(m.selected, m.cursor)
+	if f.step == formStepName {
+		b.WriteString(fmt.Sprintf("  Name: %s_\n\n", f.name))
+		b.WriteString("  Type the habit name and press Enter\n")
+		b.WriteString("  Esc to cancel\n")
+	} else {
+		b.WriteString(fmt.Sprintf("  Name: %s\n\n", f.name))
+		b.WriteString("  Type:\n  ")
+		for i, t := range habitTypes {
+			if i == f.typeIdx {
+				b.WriteString(fmt.Sprintf("[ %s ]", t))
 			} else {
-				m.selected[m.cursor] = struct{}{}
+				b.WriteString(fmt.Sprintf("  %s  ", t))
+			}
+			if i < len(habitTypes)-1 {
+				b.WriteString("  ")
 			}
 		}
-	}
-	return m, nil
-}
-
-func (m FormModel) View() tea.View {
-	s := "what do you want"
-
-	for i, choice := range m.choices {
-		cursor := " "
-		if m.cursor == i {
-			cursor = ">"
-		}
-
-		checked := " "
-		if _, ok := m.selected[i]; ok {
-			checked = "x"
-		}
-
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
+		b.WriteString("\n\n")
+		b.WriteString("  ←→ select type   Enter confirm   Esc cancel\n")
 	}
 
-	s += "\nPress q to Quit.\n"
-
-	return tea.NewView(s)
+	return b.String()
 }

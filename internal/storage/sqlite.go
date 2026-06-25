@@ -178,6 +178,48 @@ func (db *SqliteDB) DeleteEntry(id int64) error {
 	return err
 }
 
+func (db *SqliteDB) GetEntriesByMonth(year int, month time.Month) ([]model.Entry, error) {
+	first := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+	last := first.AddDate(0, 1, 0)
+
+	rows, err := db.db.Query(
+		`SELECT id, habit_id, date, value FROM entries WHERE date >= ? AND date < ?`,
+		first.Format("2006-01-02"),
+		last.Format("2006-01-02"),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var entries []model.Entry
+	for rows.Next() {
+		var e model.Entry
+		var date string
+		if err := rows.Scan(&e.ID, &e.HabitID, &date, &e.Value); err != nil {
+			return nil, err
+		}
+		e.Date, _ = time.Parse("2006-01-02", date)
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+func (db *SqliteDB) UpsertEntry(habitID int64, date time.Time, value float64) error {
+	dateStr := date.Format("2006-01-02")
+	var id int64
+	err := db.db.QueryRow(`SELECT id FROM entries WHERE habit_id = ? AND date = ?`, habitID, dateStr).Scan(&id)
+	if err == sql.ErrNoRows {
+		_, err = db.db.Exec(`INSERT INTO entries (habit_id, date, value) VALUES (?, ?, ?)`, habitID, dateStr, value)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	_, err = db.db.Exec(`UPDATE entries SET value = ? WHERE id = ?`, value, id)
+	return err
+}
+
 func (db *SqliteDB) migrate() error {
 	_, err := db.db.Exec(`
 		CREATE TABLE IF NOT EXISTS habits (

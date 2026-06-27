@@ -5,6 +5,7 @@ import (
 
 	"daily-tracker/internal/storage"
 	"daily-tracker/internal/tracker"
+	"daily-tracker/internal/ui"
 )
 
 func main() {
@@ -15,4 +16,6 @@ func main() {
 
 	t := tracker.New(db)
 	_ = t
+
+	ui.GetDaysFromMoth(5)
 }

@@ -22,7 +22,11 @@ func New(s storage.Storage) *Tracker {
 
 // AddHabit создаёт новую привычку.
 // time.Now() проставляем здесь — это бизнес-логика, не дело storage.
-func (t *Tracker) AddHabit(name string, habitType model.HabitType, goal *float64) (model.Habit, error) {
+func (t *Tracker) AddHabit(
+	name string,
+	habitType model.HabitType,
+	goal *float64,
+) (model.Habit, error) {
 	h := model.Habit{
 		Name:      name,
 		Type:      habitType,
@@ -79,6 +83,15 @@ func (t *Tracker) ArchiveHabit(id int64) error {
 // DeleteHabit полностью удаляет привычку и все её записи из БД.
 func (t *Tracker) DeleteHabit(id int64) error {
 	return t.storage.DeleteHabit(id)
+}
+
+func (t *Tracker) GetAllEntries() ([]model.Entry, error) {
+	entries, err := t.storage.GetEntries()
+	if err != nil {
+		return nil, err
+	}
+
+	return entries, nil
 }
 
 // AddEntry добавляет запись за конкретный день.

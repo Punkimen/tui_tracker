@@ -2,10 +2,11 @@
 package ui
 
 import (
-	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"daily-tracker/internal/model"
 	"daily-tracker/internal/tracker"
@@ -50,7 +51,7 @@ func GetDaysFromMoth(month time.Month) []int {
 	for i := range days {
 		days[i] = i + 1
 	}
-	fmt.Printf("days %v, lastDay %v, month %v\n", days, lastDay, time.Month(month))
+
 	return days
 }
 
@@ -90,8 +91,40 @@ func (m AppModel) loadData() (mainData, error) {
 }
 
 func (m AppModel) Init() tea.Cmd {
-	return CreateApp
+	return nil
 }
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	key := keyMsg.String()
+	switch key {
+	case "enter":
+		return m, nil
+
+	case "q":
+		return m, tea.Quit
+	}
+
+	return m, nil
+}
+
+func (m AppModel) View() tea.View {
+	var b strings.Builder
+
+	b.WriteString("Daily tracker\n")
+
+	if m.currentFocus == buttonFocus {
+		b.WriteString("[ Create habit ]\n")
+	} else {
+		b.WriteString("Create habit\n")
+	}
+
+	for _, day := range m.days {
+		b.WriteString(strconv.Itoa(day))
+	}
+
+	return tea.NewView(b.String())
 }

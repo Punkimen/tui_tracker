@@ -2,6 +2,7 @@
 package ui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -37,7 +38,7 @@ type AppModel struct {
 	cursorRow int
 
 	habits []model.Habit
-	entry  map[string]model.Entry
+	entry  []model.Entry
 
 	now  time.Time
 	days []int
@@ -56,7 +57,6 @@ func GetDaysFromMoth(month time.Month) []int {
 }
 
 func CreateApp(t *tracker.Tracker) AppModel {
-	// habits, err := t.GetActiveHabits(time.Now().Year(), time.Now().Month())
 	now := time.Now()
 	days := GetDaysFromMoth(now.Month())
 
@@ -75,40 +75,117 @@ type mainData struct {
 	entries []model.Entry
 }
 
-func (m AppModel) loadData() (mainData, error) {
-	habits, err := m.tracker.GetActiveHabits(m.now.Year(), m.now.Month())
-	if err != nil {
-		return mainData{}, err
-	}
-	entries, err := m.tracker.GetAllEntries()
-	if err != nil {
-		return mainData{}, err
-	}
+func (m AppModel) loadData() tea.Cmd {
+	return func() tea.Msg {
+		habits, err := m.tracker.GetActiveHabits(m.now.Year(), m.now.Month())
+		if err != nil {
+			return mainData{}
+		}
+		entries, err := m.tracker.GetAllEntries()
+		if err != nil {
+			return mainData{}
+		}
 
-	return mainData{
-		habits, entries,
-	}, nil
+		return mainData{
+			habits, entries,
+		}
+	}
 }
 
 func (m AppModel) Init() tea.Cmd {
-	return nil
+	return m.loadData()
 }
 
-func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
-	if !ok {
+func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "down", "j":
+		if m.currentFocus == buttonFocus {
+			m.currentFocus = tableFocus
+		}
+
+		if m.cursorRow < len(m.habits)+1 {
+			m.cursorRow += 1
+		}
+
 		return m, nil
-	}
-	key := keyMsg.String()
-	switch key {
+	case "up", "h":
+		if m.cursorRow == 0 && m.currentFocus == tableFocus {
+			m.currentFocus = buttonFocus
+		}
+
+		if m.cursorRow > 0 && m.currentFocus == tableFocus {
+			m.cursorRow -= 1
+		}
+
+		return m, nil
 	case "enter":
 		return m, nil
-
 	case "q":
 		return m, tea.Quit
 	}
-
 	return m, nil
+}
+
+func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case mainData:
+		m.habits = msg.habits
+		m.entry = msg.entries
+		return m, nil
+	case tea.KeyPressMsg:
+		return m.navigationUpdate(msg)
+	}
+	return m, nil
+}
+
+func borderTable(width []int) string {
+	var b strings.Builder
+
+	for _, i := range width {
+		b.WriteByte('+')
+		b.WriteString(strings.Repeat("-", i))
+	}
+
+	b.WriteByte('+')
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+func rowTable(values []string, width []int) string {
+	var b strings.Builder
+
+	for i, v := range values {
+		b.WriteByte('|')
+		b.WriteString(fmt.Sprintf("%-*s", width[i], v))
+	}
+	b.WriteByte('|')
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+func (m AppModel) renderTable(b *strings.Builder) {
+	month := time.Time(m.now).Month().String()
+	const (
+		firstColWidth = 10
+		colWidth      = 4
+	)
+	width := make([]int, len(m.days)+1)
+	width[0] = firstColWidth
+	for i := 1; i < len(width); i++ {
+		width[i] = colWidth
+	}
+
+	row := make([]string, 0, len(m.days)+1)
+	row = append(row, month)
+	for _, d := range m.days {
+		row = append(row, strconv.Itoa(d))
+	}
+
+	b.WriteString(borderTable(width))
+	b.WriteString(rowTable(row, width))
+	b.WriteString(borderTable(width))
 }
 
 func (m AppModel) View() tea.View {
@@ -121,10 +198,7 @@ func (m AppModel) View() tea.View {
 	} else {
 		b.WriteString("Create habit\n")
 	}
-
-	for _, day := range m.days {
-		b.WriteString(strconv.Itoa(day))
-	}
+	m.renderTable(&b)
 
 	return tea.NewView(b.String())
 }

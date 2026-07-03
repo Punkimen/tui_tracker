@@ -59,7 +59,6 @@ func GetDaysFromMoth(month time.Month) []int {
 func CreateApp(t *tracker.Tracker) AppModel {
 	now := time.Now()
 	days := GetDaysFromMoth(now.Month())
-
 	return AppModel{
 		tracker:       t,
 		currentScreen: appScreen,
@@ -119,6 +118,14 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case "enter":
+		if m.currentFocus == buttonFocus {
+			return FormModel{
+				t:         m.tracker,
+				app:       m,
+				typeHabit: model.HabitProgress,
+				focus:     field,
+			}, nil
+		}
 		return m, nil
 	case "q":
 		return m, tea.Quit
@@ -186,6 +193,13 @@ func (m AppModel) renderTable(b *strings.Builder) {
 	b.WriteString(borderTable(width))
 	b.WriteString(rowTable(row, width))
 	b.WriteString(borderTable(width))
+
+	for _, v := range m.habits {
+		habitRow := make([]string, len(m.days)+1)
+		habitRow[0] = v.Name
+		b.WriteString(rowTable(habitRow, width))
+		b.WriteString(borderTable(width))
+	}
 }
 
 func (m AppModel) View() tea.View {

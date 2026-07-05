@@ -102,12 +102,12 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.currentFocus = tableFocus
 		}
 
-		if m.cursorRow < len(m.habits)+1 {
+		if m.cursorRow < len(m.habits)-1 {
 			m.cursorRow += 1
 		}
 
 		return m, nil
-	case "up", "h":
+	case "up", "k":
 		if m.cursorRow == 0 && m.currentFocus == tableFocus {
 			m.currentFocus = buttonFocus
 		}
@@ -115,7 +115,15 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.cursorRow > 0 && m.currentFocus == tableFocus {
 			m.cursorRow -= 1
 		}
+	case "left", "h":
+		if m.cursorCol != 0 && m.currentFocus == tableFocus {
+			m.cursorCol -= 1
+		}
 
+	case "right", "l":
+		if m.cursorCol < len(m.days)-1 && m.currentFocus == tableFocus {
+			m.cursorCol += 1
+		}
 		return m, nil
 	case "enter":
 		if m.currentFocus == buttonFocus {
@@ -124,6 +132,7 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				app:       m,
 				typeHabit: model.HabitProgress,
 				focus:     field,
+				editField: true,
 			}, nil
 		}
 		return m, nil
@@ -194,9 +203,12 @@ func (m AppModel) renderTable(b *strings.Builder) {
 	b.WriteString(rowTable(row, width))
 	b.WriteString(borderTable(width))
 
-	for _, v := range m.habits {
+	for i, v := range m.habits {
 		habitRow := make([]string, len(m.days)+1)
 		habitRow[0] = v.Name
+		if m.cursorRow == i {
+			habitRow[m.cursorCol+1] = "X"
+		}
 		b.WriteString(rowTable(habitRow, width))
 		b.WriteString(borderTable(width))
 	}

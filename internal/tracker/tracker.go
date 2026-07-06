@@ -94,6 +94,28 @@ func (t *Tracker) GetAllEntries() ([]model.Entry, error) {
 	return entries, nil
 }
 
+// GetEntryByCurrentDate получает entry по конкретной дате
+func (t *Tracker) GetEntryByCurrentDate(habitID int64, date time.Time) (*model.Entry, error) {
+	entries, err := t.storage.GetEntries()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range entries {
+		if e.HabitID == habitID && sameDate(e.Date, date) {
+			return &e, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func sameDate(a, b time.Time) bool {
+	return a.Year() == b.Year() &&
+		a.Month() == b.Month() &&
+		a.Day() == b.Day()
+}
+
 // AddEntry добавляет запись за конкретный день.
 func (t *Tracker) AddEntry(habitID int64, date time.Time, value float64) (model.Entry, error) {
 	e := model.Entry{

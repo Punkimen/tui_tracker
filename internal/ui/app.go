@@ -42,6 +42,8 @@ type AppModel struct {
 
 	now  time.Time
 	days []int
+
+	editTable bool
 }
 
 func GetDaysFromMoth(month time.Month) []int {
@@ -95,6 +97,16 @@ func (m AppModel) Init() tea.Cmd {
 	return m.loadData()
 }
 
+func (m AppModel) updateHabit() (tea.Model, tea.Cmd) {
+	day := m.days[m.cursorCol]
+	habitID := m.habits[m.cursorRow].ID
+	currentEntryDate := time.Date(m.now.Year(), m.now.Month(), day, 0, 0, 0, 0, m.now.Location())
+
+	m.tracker.AddEntry(habitID, currentEntryDate, 1)
+
+	return m, m.loadData()
+}
+
 func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "down", "j":
@@ -134,6 +146,9 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				focus:     field,
 				editField: true,
 			}, nil
+		}
+		if m.currentFocus == tableFocus {
+			m.updateHabit()
 		}
 		return m, nil
 	case "q":
@@ -206,12 +221,63 @@ func (m AppModel) renderTable(b *strings.Builder) {
 	for i, v := range m.habits {
 		habitRow := make([]string, len(m.days)+1)
 		habitRow[0] = v.Name
+
+		for col, day := range m.days {
+			currentDate := time.Date(
+				m.now.Year(),
+				m.now.Month(),
+				day,
+				0, 0, 0, 0,
+				m.now.Location(),
+			)
+
+			entry, err := m.tracker.GetEntryByCurrentDate(v.ID, currentDate)
+			if err != nil {
+				habitRow[col+1] = "!"
+				continue
+			}
+
+			if entry != nil && entry.Value != 0 {
+				habitRow[col+1] = strconv.FormatFloat(entry.Value, 'f', 0, 64)
+			}
+		}
+
 		if m.cursorRow == i {
 			habitRow[m.cursorCol+1] = "X"
 		}
+
 		b.WriteString(rowTable(habitRow, width))
 		b.WriteString(borderTable(width))
+		// allEntry, _ := m.tracker.GetAllEntries()
+
+		// entries := make([]string, len(allEntry))
+		//
+		// for i, v := range allEntry {
+		// 	if v.Value != 0 {
+		// 		entries[i] = strconv.FormatFloat(v.Value, 'f', 0, 64)
+		// 	} else {
+		// 		entries[i] = "puk"
+		// 	}
+		// }
+		// b.WriteString(rowTable(entries, width))
 	}
+
+	// for i, v := range m.habits {
+	// 	habitRow := make([]string, len(m.days)+1)
+	// 	habitRow[0] = v.Name
+	// 	currentDate := time.Date(m.now.Year(), m.now.Month(), i+1, 0, 0, 0, 0, m.now.Location())
+	// 	entry, err := m.tracker.GetEntryByCurrentDate(v.ID, currentDate)
+	// 	if err != nil {
+	// 		habitRow[m.cursorCol+1] = "!"
+	// 	} else if entry != nil && entry.Value != 0 {
+	// 		habitRow[m.cursorCol+1] = strconv.FormatFloat(entry.Value, 'f', 0, 64)
+	// 	}
+	// 	if m.cursorRow == i {
+	// 		habitRow[m.cursorCol+1] = "X"
+	// 	}
+	// 	b.WriteString(rowTable(habitRow, width))
+	// 	b.WriteString(borderTable(width))
+	// }
 }
 
 func (m AppModel) View() tea.View {

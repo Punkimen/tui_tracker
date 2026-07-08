@@ -43,7 +43,9 @@ type AppModel struct {
 	now  time.Time
 	days []int
 
-	editTable bool
+	editTable         bool
+	currentEntryValue string
+	err               string
 }
 
 func GetDaysFromMoth(month time.Month) []int {
@@ -102,9 +104,69 @@ func (m AppModel) updateHabit() (tea.Model, tea.Cmd) {
 	habitID := m.habits[m.cursorRow].ID
 	currentEntryDate := time.Date(m.now.Year(), m.now.Month(), day, 0, 0, 0, 0, m.now.Location())
 
-	m.tracker.AddEntry(habitID, currentEntryDate, 1)
+	value, err := strconv.ParseFloat(strings.TrimSpace(m.currentEntryValue), 64)
+	if err != nil {
+		m.err = "Error with value"
+		m.editTable = false
+		m.currentEntryValue = ""
+		return m, nil
+	}
 
+	entry, err := m.tracker.GetEntryByCurrentDate(habitID, currentEntryDate)
+	if err != nil {
+		m.err = err.Error()
+		m.editTable = false
+		m.currentEntryValue = ""
+		return m, nil
+	}
+
+	if entry != nil {
+		if _, err := m.tracker.UpdateEntry(entry.ID, value); err != nil {
+			m.err = err.Error()
+			m.editTable = false
+			m.currentEntryValue = ""
+			return m, nil
+		}
+	} else if _, err := m.tracker.AddEntry(habitID, currentEntryDate, value); err != nil {
+		m.err = err.Error()
+		m.editTable = false
+		m.currentEntryValue = ""
+		return m, nil
+	}
+
+	m.err = ""
+	m.editTable = false
+	m.currentEntryValue = ""
 	return m, m.loadData()
+}
+
+func isNumberInput(value string) bool {
+	if value == "" || value == "." {
+		return true
+	}
+
+	_, err := strconv.ParseFloat(value, 64)
+	return err == nil
+}
+
+func (m AppModel) updateField(msg tea.KeyPressMsg) AppModel {
+	switch msg.String() {
+	case "backspace":
+		runes := []rune(m.currentEntryValue)
+		if len(runes) > 0 {
+			m.currentEntryValue = string(runes[:len(runes)-1])
+		}
+	default:
+		key := msg.String()
+		if len([]rune(key)) == 1 {
+			next := m.currentEntryValue + key
+			if isNumberInput(next) {
+				m.currentEntryValue = next
+			}
+		}
+	}
+
+	return m
 }
 
 func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -148,7 +210,56 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}, nil
 		}
 		if m.currentFocus == tableFocus {
-			m.updateHabit()
+
+			habitType := m.habits[m.cursorRow].Type
+			if habitType == "count" {
+				habitID := m.habits[m.cursorRow].ID
+				day := m.days[m.cursorCol]
+
+				currentEntryDate := time.Date(
+					m.now.Year(),
+					m.now.Month(),
+					day,
+					0,
+					0,
+					0,
+					0,
+					m.now.Location(),
+				)
+
+				entry, err := m.tracker.GetEntryByCurrentDate(habitID, currentEntryDate)
+				if err != nil {
+					m.err = err.Error()
+					m.editTable = false
+					m.currentEntryValue = ""
+					return m, nil
+				}
+				if entry != nil {
+					value := 1.0
+					if entry.Value != 0 {
+						value = 0
+					}
+
+					if _, err := m.tracker.UpdateEntry(entry.ID, value); err != nil {
+						m.err = err.Error()
+						m.editTable = false
+						m.currentEntryValue = ""
+						return m, nil
+					}
+				} else if _, err := m.tracker.AddEntry(habitID, currentEntryDate, 1); err != nil {
+					m.err = err.Error()
+					m.editTable = false
+					m.currentEntryValue = ""
+					return m, nil
+				}
+				return m, nil
+			}
+			if m.editTable {
+				return m.updateHabit()
+			} else {
+				m.editTable = true
+				m.currentEntryValue = ""
+			}
 		}
 		return m, nil
 	case "q":
@@ -164,7 +275,19 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.entry = msg.entries
 		return m, nil
 	case tea.KeyPressMsg:
-		return m.navigationUpdate(msg)
+		if m.editTable {
+			switch msg.String() {
+			case "enter":
+				return m.updateHabit()
+			case "esc":
+				m.editTable = false
+				m.currentEntryValue = ""
+				return m, nil
+			}
+			return m.updateField(msg), nil
+		} else {
+			return m.navigationUpdate(msg)
+		}
 	}
 	return m, nil
 }
@@ -238,12 +361,16 @@ func (m AppModel) renderTable(b *strings.Builder) {
 			}
 
 			if entry != nil && entry.Value != 0 {
-				habitRow[col+1] = strconv.FormatFloat(entry.Value, 'f', 0, 64)
+				habitRow[col+1] = strconv.FormatFloat(entry.Value, 'f', -1, 64)
 			}
 		}
 
 		if m.cursorRow == i {
-			habitRow[m.cursorCol+1] = "X"
+			if m.editTable && m.currentFocus == tableFocus {
+				habitRow[m.cursorCol+1] = m.currentEntryValue
+			} else {
+				habitRow[m.cursorCol+1] = "X"
+			}
 		}
 
 		b.WriteString(rowTable(habitRow, width))
@@ -291,6 +418,7 @@ func (m AppModel) View() tea.View {
 		b.WriteString("Create habit\n")
 	}
 	m.renderTable(&b)
+	b.WriteString(fmt.Sprintf("\n %v", m.err))
 
 	return tea.NewView(b.String())
 }

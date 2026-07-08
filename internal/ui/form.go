@@ -19,6 +19,8 @@ type FormModel struct {
 	editField bool
 	goal      *float64
 	err       string
+	habitID   int64
+	habitForm FormHabitModel
 }
 
 const (
@@ -148,10 +150,16 @@ func (f FormModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				f.err = "Tracker is not initialized"
 				return f, nil
 			}
-
-			if _, err := f.t.AddHabit(f.field, f.typeHabit, f.goal); err != nil {
-				f.err = err.Error()
-				return f, nil
+			if f.habitID != 0 {
+				if _, err := f.t.UpdateHabit(f.habitID, f.field, f.typeHabit); err != nil {
+					f.err = err.Error()
+					return f, nil
+				}
+			} else {
+				if _, err := f.t.AddHabit(f.field, f.typeHabit, f.goal); err != nil {
+					f.err = err.Error()
+					return f, nil
+				}
 			}
 
 			return f.app, f.app.loadData()

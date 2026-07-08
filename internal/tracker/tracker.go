@@ -2,6 +2,8 @@
 package tracker
 
 import (
+	"errors"
+	"strings"
 	"time"
 
 	"daily-tracker/internal/model"
@@ -12,6 +14,10 @@ import (
 // Хранит ссылку на storage через интерфейс, не через конкретный тип.
 type Tracker struct {
 	storage storage.Storage
+}
+
+type habitUpdater interface {
+	UpdateHabit(h model.Habit) (model.Habit, error)
 }
 
 // New — конструктор Tracker. Принимает любую реализацию Storage.
@@ -72,6 +78,50 @@ func (t *Tracker) GetActiveHabits(year int, month time.Month) ([]model.Habit, er
 	}
 
 	return active, nil
+}
+
+func (t *Tracker) UpdateHabit(
+	id int64,
+	name string,
+	habitType model.HabitType,
+) (model.Habit, error) {
+	if id <= 0 {
+		return model.Habit{}, errors.New("habit id is invalid")
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return model.Habit{}, errors.New("habit name is empty")
+	}
+
+	if habitType != model.HabitProgress &&
+		habitType != model.HabitCount &&
+		habitType != model.HabitMinutes {
+		return model.Habit{}, errors.New("habit type is invalid")
+	}
+
+	updater, ok := t.storage.(habitUpdater)
+	if !ok {
+		return model.Habit{}, errors.New("storage does not support habit update")
+	}
+
+	habits, err := t.storage.GetHabits()
+	if err != nil {
+		return model.Habit{}, err
+	}
+
+	for _, habit := range habits {
+		if habit.ID != id {
+			continue
+		}
+
+		habit.Name = name
+		habit.Type = habitType
+
+		return updater.UpdateHabit(habit)
+	}
+
+	return model.Habit{}, errors.New("habit not found")
 }
 
 // ArchiveHabit устанавливает дату окончания привычки — она перестаёт отображаться в новых месяцах.

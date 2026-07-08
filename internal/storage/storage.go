@@ -10,6 +10,7 @@ import (
 type Storage interface {
 	SaveHabit(h model.Habit) (int64, error)
 	GetHabits() ([]model.Habit, error)
+	UpdateHabit(h model.Habit) (model.Habit, error)
 	DeleteHabit(id int64) error
 	HabitEndDate(id int64, date time.Time) error
 

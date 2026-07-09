@@ -1,3 +1,2 @@
-  tracker.db
-  tracker.db-shm
-  tracker.db-wal
+./tracker.db
+./main

@@ -18,13 +18,18 @@ type (
 	focus  int
 )
 
+type buttonType struct {
+	label    string
+	onSelect func(app AppModel) (tea.Model, tea.Cmd)
+}
+
 const (
 	appScreen screen = iota
 	formScreen
 )
 
 const (
-	buttonFocus focus = iota
+	buttonsFocus focus = iota
 	tableFocus
 )
 
@@ -42,6 +47,9 @@ type AppModel struct {
 
 	now  time.Time
 	days []int
+
+	buttons        []buttonType
+	buttonPosition int
 
 	editTable         bool
 	currentEntryValue string
@@ -63,14 +71,46 @@ func GetDaysFromMoth(month time.Month) []int {
 func CreateApp(t *tracker.Tracker) AppModel {
 	now := time.Now()
 	days := GetDaysFromMoth(now.Month())
-	return AppModel{
-		tracker:       t,
-		currentScreen: appScreen,
-		currentFocus:  buttonFocus,
 
-		now:  now,
-		days: days,
+	app := AppModel{
+		tracker:        t,
+		currentScreen:  appScreen,
+		currentFocus:   buttonsFocus,
+		buttonPosition: 0,
+		now:            now,
+		days:           days,
 	}
+	app.InitButtons()
+	return app
+}
+
+func (m *AppModel) InitButtons() {
+	buttons := make([]buttonType, 2)
+	buttons[0] = buttonType{
+		label: "Create Habit",
+		onSelect: func(app AppModel) (tea.Model, tea.Cmd) {
+			return FormModel{
+				t:         app.tracker,
+				app:       app,
+				typeHabit: model.HabitProgress,
+				focus:     field,
+				editField: true,
+			}, nil
+		},
+	}
+
+	buttons[1] = buttonType{
+		label: "Update Habits",
+		onSelect: func(app AppModel) (tea.Model, tea.Cmd) {
+			return FormHabitModel{
+				t:           app.tracker,
+				app:         app,
+				habits:      app.habits,
+				cursorHabit: 0,
+			}, nil
+		},
+	}
+	m.buttons = buttons
 }
 
 type mainData struct {
@@ -103,7 +143,6 @@ func (m AppModel) updateHabit() (tea.Model, tea.Cmd) {
 	day := m.days[m.cursorCol]
 	habitID := m.habits[m.cursorRow].ID
 	currentEntryDate := time.Date(m.now.Year(), m.now.Month(), day, 0, 0, 0, 0, m.now.Location())
-
 	value, err := strconv.ParseFloat(strings.TrimSpace(m.currentEntryValue), 64)
 	if err != nil {
 		m.err = "Error with value"
@@ -172,7 +211,7 @@ func (m AppModel) updateField(msg tea.KeyPressMsg) AppModel {
 func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "down", "j":
-		if m.currentFocus == buttonFocus {
+		if m.currentFocus == buttonsFocus {
 			m.currentFocus = tableFocus
 		}
 
@@ -183,31 +222,32 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "up", "k":
 		if m.cursorRow == 0 && m.currentFocus == tableFocus {
-			m.currentFocus = buttonFocus
+			m.currentFocus = buttonsFocus
 		}
 
 		if m.cursorRow > 0 && m.currentFocus == tableFocus {
 			m.cursorRow -= 1
 		}
 	case "left", "h":
+		if m.currentFocus == buttonsFocus && m.buttonPosition != 0 {
+			m.buttonPosition -= 1
+		}
 		if m.cursorCol != 0 && m.currentFocus == tableFocus {
 			m.cursorCol -= 1
 		}
 
 	case "right", "l":
+		if m.currentFocus == buttonsFocus && m.buttonPosition < len(m.buttons)-1 {
+			m.buttonPosition += 1
+		}
 		if m.cursorCol < len(m.days)-1 && m.currentFocus == tableFocus {
 			m.cursorCol += 1
 		}
 		return m, nil
 	case "enter":
-		if m.currentFocus == buttonFocus {
-			return FormModel{
-				t:         m.tracker,
-				app:       m,
-				typeHabit: model.HabitProgress,
-				focus:     field,
-				editField: true,
-			}, nil
+		if m.currentFocus == buttonsFocus {
+			currentButton := m.buttons[m.buttonPosition]
+			return currentButton.onSelect(m)
 		}
 		if m.currentFocus == tableFocus {
 
@@ -375,36 +415,7 @@ func (m AppModel) renderTable(b *strings.Builder) {
 
 		b.WriteString(rowTable(habitRow, width))
 		b.WriteString(borderTable(width))
-		// allEntry, _ := m.tracker.GetAllEntries()
-
-		// entries := make([]string, len(allEntry))
-		//
-		// for i, v := range allEntry {
-		// 	if v.Value != 0 {
-		// 		entries[i] = strconv.FormatFloat(v.Value, 'f', 0, 64)
-		// 	} else {
-		// 		entries[i] = "puk"
-		// 	}
-		// }
-		// b.WriteString(rowTable(entries, width))
 	}
-
-	// for i, v := range m.habits {
-	// 	habitRow := make([]string, len(m.days)+1)
-	// 	habitRow[0] = v.Name
-	// 	currentDate := time.Date(m.now.Year(), m.now.Month(), i+1, 0, 0, 0, 0, m.now.Location())
-	// 	entry, err := m.tracker.GetEntryByCurrentDate(v.ID, currentDate)
-	// 	if err != nil {
-	// 		habitRow[m.cursorCol+1] = "!"
-	// 	} else if entry != nil && entry.Value != 0 {
-	// 		habitRow[m.cursorCol+1] = strconv.FormatFloat(entry.Value, 'f', 0, 64)
-	// 	}
-	// 	if m.cursorRow == i {
-	// 		habitRow[m.cursorCol+1] = "X"
-	// 	}
-	// 	b.WriteString(rowTable(habitRow, width))
-	// 	b.WriteString(borderTable(width))
-	// }
 }
 
 func (m AppModel) View() tea.View {
@@ -412,11 +423,18 @@ func (m AppModel) View() tea.View {
 
 	b.WriteString("Daily tracker\n")
 
-	if m.currentFocus == buttonFocus {
-		b.WriteString("[ Create habit ]\n")
-	} else {
-		b.WriteString("Create habit\n")
+	for i, v := range m.buttons {
+		if m.currentFocus == buttonsFocus {
+			if i == m.buttonPosition {
+				b.WriteString(fmt.Sprintf("[%v] ", v.label))
+			} else {
+				b.WriteString(fmt.Sprintf("%v ", v.label))
+			}
+		} else {
+			b.WriteString(fmt.Sprintf("%v ", v.label))
+		}
 	}
+	b.WriteString("\n")
 	m.renderTable(&b)
 	b.WriteString(fmt.Sprintf("\n %v", m.err))
 

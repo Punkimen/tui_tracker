@@ -20,7 +20,7 @@ type FormModel struct {
 	goal      *float64
 	err       string
 	habitID   int64
-	habitForm FormHabitModel
+	habitForm *FormHabitModel
 }
 
 const (
@@ -116,7 +116,14 @@ func (f FormModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		switch f.focus {
 		case field:
-			f.editField = false
+			if f.editField {
+				f.editField = false
+			} else {
+				if f.habitForm != nil {
+					return f.habitForm, f.app.loadData()
+				}
+				return f.app, nil
+			}
 		case createHabit:
 			f.focus = f.selectedTypeFocus()
 		}

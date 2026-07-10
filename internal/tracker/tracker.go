@@ -2,6 +2,8 @@
 package tracker
 
 import (
+	"errors"
+	"strings"
 	"time"
 
 	"daily-tracker/internal/model"
@@ -14,6 +16,10 @@ type Tracker struct {
 	storage storage.Storage
 }
 
+type habitUpdater interface {
+	UpdateHabit(h model.Habit) (model.Habit, error)
+}
+
 // New — конструктор Tracker. Принимает любую реализацию Storage.
 // Аналог в JS: function createTracker(storage: Storage) { return { storage } }
 func New(s storage.Storage) *Tracker {
@@ -22,7 +28,11 @@ func New(s storage.Storage) *Tracker {
 
 // AddHabit создаёт новую привычку.
 // time.Now() проставляем здесь — это бизнес-логика, не дело storage.
-func (t *Tracker) AddHabit(name string, habitType model.HabitType, goal *float64) (model.Habit, error) {
+func (t *Tracker) AddHabit(
+	name string,
+	habitType model.HabitType,
+	goal *float64,
+) (model.Habit, error) {
 	h := model.Habit{
 		Name:      name,
 		Type:      habitType,
@@ -70,6 +80,50 @@ func (t *Tracker) GetActiveHabits(year int, month time.Month) ([]model.Habit, er
 	return active, nil
 }
 
+func (t *Tracker) UpdateHabit(
+	id int64,
+	name string,
+	habitType model.HabitType,
+) (model.Habit, error) {
+	if id <= 0 {
+		return model.Habit{}, errors.New("habit id is invalid")
+	}
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return model.Habit{}, errors.New("habit name is empty")
+	}
+
+	if habitType != model.HabitProgress &&
+		habitType != model.HabitCount &&
+		habitType != model.HabitMinutes {
+		return model.Habit{}, errors.New("habit type is invalid")
+	}
+
+	updater, ok := t.storage.(habitUpdater)
+	if !ok {
+		return model.Habit{}, errors.New("storage does not support habit update")
+	}
+
+	habits, err := t.storage.GetHabits()
+	if err != nil {
+		return model.Habit{}, err
+	}
+
+	for _, habit := range habits {
+		if habit.ID != id {
+			continue
+		}
+
+		habit.Name = name
+		habit.Type = habitType
+
+		return updater.UpdateHabit(habit)
+	}
+
+	return model.Habit{}, errors.New("habit not found")
+}
+
 // ArchiveHabit устанавливает дату окончания привычки — она перестаёт отображаться в новых месяцах.
 func (t *Tracker) ArchiveHabit(id int64) error {
 	now := time.Now()
@@ -79,6 +133,37 @@ func (t *Tracker) ArchiveHabit(id int64) error {
 // DeleteHabit полностью удаляет привычку и все её записи из БД.
 func (t *Tracker) DeleteHabit(id int64) error {
 	return t.storage.DeleteHabit(id)
+}
+
+func (t *Tracker) GetAllEntries() ([]model.Entry, error) {
+	entries, err := t.storage.GetEntries()
+	if err != nil {
+		return nil, err
+	}
+
+	return entries, nil
+}
+
+// GetEntryByCurrentDate получает entry по конкретной дате
+func (t *Tracker) GetEntryByCurrentDate(habitID int64, date time.Time) (*model.Entry, error) {
+	entries, err := t.storage.GetEntries()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range entries {
+		if e.HabitID == habitID && sameDate(e.Date, date) {
+			return &e, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func sameDate(a, b time.Time) bool {
+	return a.Year() == b.Year() &&
+		a.Month() == b.Month() &&
+		a.Day() == b.Day()
 }
 
 // AddEntry добавляет запись за конкретный день.

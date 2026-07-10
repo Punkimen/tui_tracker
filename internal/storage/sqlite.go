@@ -105,6 +105,68 @@ func (db *SqliteDB) GetHabits() ([]model.Habit, error) {
 	return habits, rows.Err()
 }
 
+func (db *SqliteDB) UpdateHabit(h model.Habit) (model.Habit, error) {
+	var goalVal sql.NullFloat64
+	if h.Goal != nil {
+		goalVal = sql.NullFloat64{Float64: *h.Goal, Valid: true}
+	}
+
+	var endDateVal sql.NullString
+	if h.EndDate != nil {
+		endDateVal = sql.NullString{String: h.EndDate.Format("2006-01-02"), Valid: true}
+	}
+
+	_, err := db.db.Exec(
+		`UPDATE habits SET name = ?, type = ?, goal = ?, start_date = ?, end_date = ?, created_at = ? WHERE id = ?`,
+		h.Name,
+		h.Type,
+		goalVal,
+		h.StartDate.Format("2006-01-02"),
+		endDateVal,
+		h.CreatedAt.Format("2006-01-02"),
+		h.ID,
+	)
+	if err != nil {
+		return model.Habit{}, err
+	}
+
+	var habit model.Habit
+	var goal sql.NullFloat64
+	var endDate sql.NullString
+	var startDate, createdAt string
+
+	row := db.db.QueryRow(
+		`SELECT id, name, type, goal, start_date, end_date, created_at FROM habits WHERE id = ?`,
+		h.ID,
+	)
+	err = row.Scan(
+		&habit.ID,
+		&habit.Name,
+		&habit.Type,
+		&goal,
+		&startDate,
+		&endDate,
+		&createdAt,
+	)
+	if err != nil {
+		return model.Habit{}, err
+	}
+
+	if goal.Valid {
+		habit.Goal = &goal.Float64
+	}
+
+	if endDate.Valid {
+		t, _ := time.Parse("2006-01-02", endDate.String)
+		habit.EndDate = &t
+	}
+
+	habit.StartDate, _ = time.Parse("2006-01-02", startDate)
+	habit.CreatedAt, _ = time.Parse("2006-01-02", createdAt)
+
+	return habit, nil
+}
+
 func (db *SqliteDB) DeleteHabit(id int64) error {
 	_, err := db.db.Exec(`DELETE FROM habits WHERE id = ?`, id)
 	return err

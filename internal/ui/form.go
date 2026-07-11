@@ -1,10 +1,10 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss"
 
 	"daily-tracker/internal/model"
 	"daily-tracker/internal/tracker"
@@ -187,13 +187,27 @@ func (f FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (f FormModel) renderField(b *strings.Builder) {
-	if f.focus == 0 {
+	fieldValue := "Имя привычки: " + f.field
+
+	if f.focus == field {
 		b.WriteByte('>')
-		b.WriteString(f.field)
-		b.WriteString("\n\n")
+		b.WriteString(FieldFocusStyle.Render(fieldValue))
 	} else {
-		b.WriteString(f.field)
-		b.WriteString("\n\n")
+		b.WriteByte(' ')
+		b.WriteString(FieldStyle.Render(fieldValue))
+	}
+
+	b.WriteString("\n\n")
+}
+
+func (f FormModel) renderFormButton(label string, focused bool, selected bool) string {
+	switch {
+	case focused:
+		return ButtonFocusStyle.Render(label)
+	case selected:
+		return ButtonPrimaryStyle.Render(label)
+	default:
+		return ButtonSecondaryStyle.Render(label)
 	}
 }
 
@@ -207,28 +221,17 @@ func (f FormModel) renderTypes(b *strings.Builder) {
 		{minutes, "minutes"},
 	}
 
+	buttons := make([]string, 0, len(types))
 	for _, t := range types {
 		selected := f.typeHabit ==
 			model.HabitType(t.label)
 		focused := f.focus == t.focus
 
-		switch {
-		case focused:
-			b.WriteString("> ")
-		default:
-			b.WriteString("  ")
-		}
-
-		if selected {
-			b.WriteString(fmt.Sprintf("[%v]", t.label))
-		} else {
-			b.WriteString(fmt.Sprintf("%v ", t.label))
-		}
-
-		if t.label == "minutes" {
-			b.WriteString("\n")
-		}
+		buttons = append(buttons, f.renderFormButton(t.label, focused, selected))
 	}
+
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, buttons...))
+	b.WriteString("\n\n")
 }
 
 func (f FormModel) View() tea.View {
@@ -237,13 +240,12 @@ func (f FormModel) View() tea.View {
 	f.renderField(&b)
 	b.WriteString("\n")
 	f.renderTypes(&b)
-	b.WriteString("\b")
-	if f.focus == createHabit {
-		b.WriteString("[CreateHabbit]")
-	} else {
-		b.WriteString("CreateHabbit")
+	b.WriteString(f.renderFormButton("Create Habit", f.focus == createHabit, false))
+
+	if f.err != "" {
+		b.WriteString("\n")
+		b.WriteString(f.err)
 	}
-	b.WriteString(f.err)
 
 	return tea.NewView(b.String())
 }

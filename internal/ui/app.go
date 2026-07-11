@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss"
 
 	"daily-tracker/internal/model"
 	"daily-tracker/internal/tracker"
@@ -21,6 +22,7 @@ type (
 type buttonType struct {
 	label    string
 	onSelect func(app AppModel) (tea.Model, tea.Cmd)
+	style    lipgloss.Style
 }
 
 const (
@@ -54,6 +56,8 @@ type AppModel struct {
 	editTable         bool
 	currentEntryValue string
 	err               string
+
+	windowWidth int
 }
 
 func GetDaysFromMoth(month time.Month) []int {
@@ -88,6 +92,7 @@ func (m *AppModel) InitButtons() {
 	buttons := make([]buttonType, 2)
 	buttons[0] = buttonType{
 		label: "Create Habit",
+		style: ButtonPrimaryStyle,
 		onSelect: func(app AppModel) (tea.Model, tea.Cmd) {
 			return FormModel{
 				t:         app.tracker,
@@ -101,6 +106,7 @@ func (m *AppModel) InitButtons() {
 
 	buttons[1] = buttonType{
 		label: "Update Habits",
+		style: ButtonSecondaryStyle,
 		onSelect: func(app AppModel) (tea.Model, tea.Cmd) {
 			return FormHabitModel{
 				t:           app.tracker,
@@ -310,6 +316,9 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.windowWidth = msg.Width
+		return m, nil
 	case mainData:
 		m.habits = msg.habits
 		m.entry = msg.entries
@@ -418,22 +427,53 @@ func (m AppModel) renderTable(b *strings.Builder) {
 	}
 }
 
+func (m AppModel) renderTitle() string {
+	const banner = `
+            ██████╗  █████╗ ██╗██╗  ██╗   ██╗            
+            ██╔══██╗██╔══██╗██║██║  ╚██╗ ██╔╝            
+            ██║  ██║███████║██║██║   ╚████╔╝             
+            ██║  ██║██╔══██║██║██║    ╚██╔╝              
+            ██████╔╝██║  ██║██║███████╗██║               
+            ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝╚═╝               
+                                                         
+████████╗██████╗  █████╗  ██████╗██╗  ██╗███████╗██████╗ 
+╚══██╔══╝██╔══██╗██╔══██╗██╔════╝██║ ██╔╝██╔════╝██╔══██╗
+   ██║   ██████╔╝███████║██║     █████╔╝ █████╗  ██████╔╝
+   ██║   ██╔══██╗██╔══██║██║     ██╔═██╗ ██╔══╝  ██╔══██╗
+   ██║   ██║  ██║██║  ██║╚██████╗██║  ██╗███████╗██║  ██║
+   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝`
+	title := TitleStyle.Render(strings.TrimPrefix(banner, "\n"))
+
+	if m.windowWidth <= 0 {
+		return title
+	}
+
+	return lipgloss.PlaceHorizontal(m.windowWidth, lipgloss.Center, title)
+}
+
+func (m AppModel) renderButton(index int, button buttonType) string {
+	if m.currentFocus == buttonsFocus && index == m.buttonPosition {
+		return ButtonFocusStyle.Render(button.label)
+	}
+
+	return button.style.Render(button.label)
+}
+
+func (m AppModel) renderButtons() string {
+	buttons := make([]string, len(m.buttons))
+	for i, v := range m.buttons {
+		buttons[i] = m.renderButton(i, v)
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, buttons...)
+}
+
 func (m AppModel) View() tea.View {
 	var b strings.Builder
 
-	b.WriteString("Daily tracker\n")
-
-	for i, v := range m.buttons {
-		if m.currentFocus == buttonsFocus {
-			if i == m.buttonPosition {
-				b.WriteString(fmt.Sprintf("[%v] ", v.label))
-			} else {
-				b.WriteString(fmt.Sprintf("%v ", v.label))
-			}
-		} else {
-			b.WriteString(fmt.Sprintf("%v ", v.label))
-		}
-	}
+	b.WriteString(m.renderTitle())
+	b.WriteString("\n")
+	b.WriteString(m.renderButtons())
 	b.WriteString("\n")
 	m.renderTable(&b)
 	b.WriteString(fmt.Sprintf("\n %v", m.err))

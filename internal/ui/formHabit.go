@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/lipgloss"
 
 	"daily-tracker/internal/model"
 	"daily-tracker/internal/tracker"
@@ -40,16 +41,53 @@ func (f FormHabitModel) Init() tea.Cmd {
 	return f.app.loadHabits()
 }
 
+func (f FormHabitModel) gridColumns() int {
+	if len(f.habits) == 0 {
+		return 0
+	}
+
+	columns := 3 + len(f.habits)/16
+	if columns > 10 {
+		return 10
+	}
+
+	return columns
+}
+
+func (f FormHabitModel) clampCursor() FormHabitModel {
+	if len(f.habits) == 0 {
+		f.cursorHabit = 0
+		return f
+	}
+
+	if f.cursorHabit < 0 {
+		f.cursorHabit = 0
+	}
+	if f.cursorHabit >= len(f.habits) {
+		f.cursorHabit = len(f.habits) - 1
+	}
+
+	return f
+}
+
 func (f FormHabitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case habitsData:
 		f.habits = msg.habits
+		f = f.clampCursor()
 	case tea.KeyPressMsg:
+		columns := f.gridColumns()
+
 		switch msg.String() {
 		case "enter":
+			if len(f.habits) == 0 {
+				return f, nil
+			}
+
 			currentHabbit := f.habits[f.cursorHabit]
 			return ChoosenModel{
 				prevScreen: f,
+				title:      fmt.Sprintf("Что сделать с привычкой %v", currentHabbit.Name),
 				buttons: []Button{
 					{
 						label: "Update Habit",
@@ -82,11 +120,21 @@ func (f FormHabitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			return f.app, nil
 		case "up", "k":
+			if f.cursorHabit-columns >= 0 {
+				f.cursorHabit -= columns
+			}
+			return f, nil
+		case "down", "j":
+			if f.cursorHabit+columns < len(f.habits) {
+				f.cursorHabit += columns
+			}
+			return f, nil
+		case "left", "h":
 			if f.cursorHabit > 0 {
 				f.cursorHabit -= 1
 			}
 			return f, nil
-		case "down", "j":
+		case "right", "l":
 			if f.cursorHabit < len(f.habits)-1 {
 				f.cursorHabit += 1
 			}
@@ -97,15 +145,84 @@ func (f FormHabitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return f, nil
 }
 
+func (f FormHabitModel) habitButtonWidth() int {
+	const (
+		minWidth = 12
+		maxWidth = 24
+	)
+
+	width := minWidth
+	for _, habit := range f.habits {
+		labelWidth := lipgloss.Width(habit.Name)
+		if labelWidth > width {
+			width = labelWidth
+		}
+	}
+
+	if width > maxWidth {
+		return maxWidth
+	}
+
+	return width
+}
+
+func truncateLabel(label string, width int) string {
+	if lipgloss.Width(label) <= width {
+		return label
+	}
+	if width <= 3 {
+		return strings.Repeat(".", width)
+	}
+
+	var b strings.Builder
+	for _, r := range label {
+		next := b.String() + string(r)
+		if lipgloss.Width(next)+3 > width {
+			break
+		}
+		b.WriteRune(r)
+	}
+
+	b.WriteString("...")
+	return b.String()
+}
+
+func (f FormHabitModel) renderHabitButton(label string, focused bool, width int) string {
+	label = truncateLabel(label, width)
+
+	if focused {
+		return ButtonFocusStyle.Width(width).Render(label)
+	}
+
+	return ButtonSecondaryStyle.Width(width).Render(label)
+}
+
 func (f FormHabitModel) View() tea.View {
 	var b strings.Builder
 
-	for i, v := range f.habits {
-		if f.cursorHabit == i {
-			b.WriteString(fmt.Sprintf("[%v]\n", v.Name))
-		} else {
-			b.WriteString(fmt.Sprintf("%v \n", v.Name))
+	if len(f.habits) == 0 {
+		return tea.NewView("No habits")
+	}
+
+	columns := f.gridColumns()
+	buttonWidth := f.habitButtonWidth()
+
+	for rowStart := 0; rowStart < len(f.habits); rowStart += columns {
+		rowEnd := rowStart + columns
+		if rowEnd > len(f.habits) {
+			rowEnd = len(f.habits)
 		}
+
+		row := make([]string, 0, rowEnd-rowStart)
+		for i := rowStart; i < rowEnd; i++ {
+			row = append(
+				row,
+				f.renderHabitButton(f.habits[i].Name, f.cursorHabit == i, buttonWidth),
+			)
+		}
+
+		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, row...))
+		b.WriteString("\n")
 	}
 
 	return tea.NewView(b.String())

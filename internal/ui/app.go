@@ -57,7 +57,8 @@ type AppModel struct {
 	currentEntryValue string
 	err               string
 
-	windowWidth int
+	windowWidth  int
+	windowHeight int
 }
 
 func GetDaysFromMoth(month time.Month) []int {
@@ -217,14 +218,13 @@ func (m AppModel) updateField(msg tea.KeyPressMsg) AppModel {
 func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "down", "j":
-		if m.currentFocus == buttonsFocus {
-			m.currentFocus = tableFocus
-		}
-
-		if m.cursorRow < len(m.habits)-1 {
+		if m.cursorRow < len(m.habits)-1 && m.currentFocus == tableFocus {
 			m.cursorRow += 1
 		}
 
+		if m.currentFocus == buttonsFocus {
+			m.currentFocus = tableFocus
+		}
 		return m, nil
 	case "up", "k":
 		if m.cursorRow == 0 && m.currentFocus == tableFocus {
@@ -317,6 +317,7 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
+		m.windowHeight = msg.Height
 		m.windowWidth = msg.Width
 		return m, nil
 	case mainData:
@@ -360,7 +361,7 @@ func rowTable(values []string, width []int) string {
 
 	for i, v := range values {
 		b.WriteByte('|')
-		b.WriteString(fmt.Sprintf("%-*s", width[i], v))
+		b.WriteString(padCell(v, width[i]))
 	}
 	b.WriteByte('|')
 	b.WriteString("\n")
@@ -368,11 +369,24 @@ func rowTable(values []string, width []int) string {
 	return b.String()
 }
 
+func padCell(value string, width int) string {
+	valueWidth := lipgloss.Width(value)
+	if valueWidth >= width {
+		return value
+	}
+
+	return value + strings.Repeat(" ", width-valueWidth)
+}
+
+func focusedTableCell(value string, width int) string {
+	return TableCellFocusStyle.Width(width).Render(value)
+}
+
 func (m AppModel) renderTable(b *strings.Builder) {
 	month := time.Time(m.now).Month().String()
 	const (
-		firstColWidth = 10
-		colWidth      = 4
+		firstColWidth = 15
+		colWidth      = 6
 	)
 	width := make([]int, len(m.days)+1)
 	width[0] = firstColWidth
@@ -414,12 +428,13 @@ func (m AppModel) renderTable(b *strings.Builder) {
 			}
 		}
 
-		if m.cursorRow == i {
-			if m.editTable && m.currentFocus == tableFocus {
-				habitRow[m.cursorCol+1] = m.currentEntryValue
-			} else {
-				habitRow[m.cursorCol+1] = "X"
+		if m.cursorRow == i && m.currentFocus == tableFocus {
+			focusedCol := m.cursorCol + 1
+			focusedValue := habitRow[focusedCol]
+			if m.editTable {
+				focusedValue = m.currentEntryValue
 			}
+			habitRow[focusedCol] = focusedTableCell(focusedValue, width[focusedCol])
 		}
 
 		b.WriteString(rowTable(habitRow, width))

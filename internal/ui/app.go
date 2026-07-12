@@ -580,8 +580,14 @@ func (m AppModel) renderTable(b *strings.Builder) {
 	for i := habitStart; i < habitEnd; i++ {
 		v := m.habits[i]
 		habitRow := make([]string, len(width))
-		habitRow[0] = tableCellValue(v.Name, tableFirstColWidth)
+		habitValue := TableCellFocusStyle.Width(width[0]).Render(v.Name)
 
+		if m.cursorRow == i && m.currentFocus == tableFocus {
+		 habitValue = TableCellFocusStyle.Width(width[0]).Render(v.Name)
+		}else{
+			habitValue = v.Name
+		}
+		habitRow[0] = tableCellValue(habitValue, tableFirstColWidth)
 		for col, day := range m.days[dayStart:dayEnd] {
 			currentDate := time.Date(
 				m.now.Year(),

@@ -35,6 +35,11 @@ const (
 	tableFocus
 )
 
+const (
+	tableFirstColWidth = 15
+	tableDayColWidth   = 6
+)
+
 type AppModel struct {
 	tracker *tracker.Tracker
 
@@ -43,6 +48,8 @@ type AppModel struct {
 
 	cursorCol int
 	cursorRow int
+	colOffset int
+	rowOffset int
 
 	habits []model.Habit
 	entry  []model.Entry
@@ -84,6 +91,7 @@ func CreateApp(t *tracker.Tracker) AppModel {
 		buttonPosition: 0,
 		now:            now,
 		days:           days,
+		cursorCol:      now.Day() - 1,
 	}
 	app.InitButtons()
 	return app
@@ -127,11 +135,11 @@ type mainData struct {
 
 func (m AppModel) loadData() tea.Cmd {
 	return func() tea.Msg {
-		habits, err := m.tracker.GetActiveHabits(m.now.Year(), m.now.Month())
+		habits, err := m.tracker.GetHabits(m.now)
 		if err != nil {
 			return mainData{}
 		}
-		entries, err := m.tracker.GetAllEntries()
+		entries, err := m.tracker.GetEntries(m.now)
 		if err != nil {
 			return mainData{}
 		}
@@ -215,6 +223,143 @@ func (m AppModel) updateField(msg tea.KeyPressMsg) AppModel {
 	return m
 }
 
+func (m AppModel) clampTableCursor() AppModel {
+	if len(m.habits) == 0 {
+		m.cursorRow = 0
+		m.rowOffset = 0
+	} else {
+		if m.cursorRow < 0 {
+			m.cursorRow = 0
+		}
+		if m.cursorRow >= len(m.habits) {
+			m.cursorRow = len(m.habits) - 1
+		}
+	}
+
+	if len(m.days) == 0 {
+		m.cursorCol = 0
+		m.colOffset = 0
+	} else {
+		if m.cursorCol < 0 {
+			m.cursorCol = 0
+		}
+		if m.cursorCol >= len(m.days) {
+			m.cursorCol = len(m.days) - 1
+		}
+	}
+
+	return m
+}
+
+func (m AppModel) visibleDayCount() int {
+	if len(m.days) == 0 {
+		return 0
+	}
+	if m.windowWidth <= 0 {
+		return len(m.days)
+	}
+
+	available := m.windowWidth - tableFirstColWidth - 2
+	if available <= 0 {
+		return 1
+	}
+
+	visible := available / (tableDayColWidth + 1)
+	if visible < 1 {
+		return 1
+	}
+	if visible > len(m.days) {
+		return len(m.days)
+	}
+
+	return visible
+}
+
+func (m AppModel) visibleHabitCount() int {
+	if len(m.habits) == 0 {
+		return 0
+	}
+	if m.windowHeight <= 0 {
+		return len(m.habits)
+	}
+
+	const (
+		tableHeaderHeight = 3
+		tableRowHeight    = 2
+		viewSpacingHeight = 3
+	)
+
+	available := m.windowHeight -
+		lipgloss.Height(m.renderTitle()) -
+		lipgloss.Height(m.renderButtons()) -
+		viewSpacingHeight -
+		tableHeaderHeight
+
+	if available <= 0 {
+		return 1
+	}
+
+	visible := available / tableRowHeight
+	if visible < 1 {
+		return 1
+	}
+	if visible > len(m.habits) {
+		return len(m.habits)
+	}
+
+	return visible
+}
+
+func (m AppModel) syncTableViewport() AppModel {
+	m = m.clampTableCursor()
+
+	visibleRows := m.visibleHabitCount()
+	if visibleRows <= 0 {
+		m.rowOffset = 0
+	} else {
+		if m.cursorRow < m.rowOffset {
+			m.rowOffset = m.cursorRow
+		}
+		if m.cursorRow >= m.rowOffset+visibleRows {
+			m.rowOffset = m.cursorRow - visibleRows + 1
+		}
+		maxOffset := len(m.habits) - visibleRows
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if m.rowOffset > maxOffset {
+			m.rowOffset = maxOffset
+		}
+		if m.rowOffset < 0 {
+			m.rowOffset = 0
+		}
+	}
+
+	visibleCols := m.visibleDayCount()
+	if visibleCols <= 0 {
+		m.colOffset = 0
+	} else {
+		if m.cursorCol < m.colOffset {
+			m.colOffset = m.cursorCol
+		}
+		if m.cursorCol >= m.colOffset+visibleCols {
+			m.colOffset = m.cursorCol - visibleCols + 1
+		}
+		maxOffset := len(m.days) - visibleCols
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if m.colOffset > maxOffset {
+			m.colOffset = maxOffset
+		}
+		if m.colOffset < 0 {
+			m.colOffset = 0
+		}
+	}
+
+	return m
+}
+
 func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "down", "j":
@@ -222,10 +367,10 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.cursorRow += 1
 		}
 
-		if m.currentFocus == buttonsFocus {
+		if m.currentFocus == buttonsFocus && len(m.habits) > 0 {
 			m.currentFocus = tableFocus
 		}
-		return m, nil
+		return m.syncTableViewport(), nil
 	case "up", "k":
 		if m.cursorRow == 0 && m.currentFocus == tableFocus {
 			m.currentFocus = buttonsFocus
@@ -249,13 +394,16 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.cursorCol < len(m.days)-1 && m.currentFocus == tableFocus {
 			m.cursorCol += 1
 		}
-		return m, nil
+		return m.syncTableViewport(), nil
 	case "enter":
 		if m.currentFocus == buttonsFocus {
 			currentButton := m.buttons[m.buttonPosition]
 			return currentButton.onSelect(m)
 		}
 		if m.currentFocus == tableFocus {
+			if len(m.habits) == 0 || len(m.days) == 0 {
+				return m, nil
+			}
 
 			habitType := m.habits[m.cursorRow].Type
 			if habitType == "count" {
@@ -311,7 +459,7 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "q":
 		return m, tea.Quit
 	}
-	return m, nil
+	return m.syncTableViewport(), nil
 }
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -319,11 +467,11 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.windowHeight = msg.Height
 		m.windowWidth = msg.Width
-		return m, nil
+		return m.syncTableViewport(), nil
 	case mainData:
 		m.habits = msg.habits
 		m.entry = msg.entries
-		return m, nil
+		return m.syncTableViewport(), nil
 	case tea.KeyPressMsg:
 		if m.editTable {
 			switch msg.String() {
@@ -382,21 +530,46 @@ func focusedTableCell(value string, width int) string {
 	return TableCellFocusStyle.Width(width).Render(value)
 }
 
-func (m AppModel) renderTable(b *strings.Builder) {
-	month := time.Time(m.now).Month().String()
-	const (
-		firstColWidth = 15
-		colWidth      = 6
-	)
-	width := make([]int, len(m.days)+1)
-	width[0] = firstColWidth
-	for i := 1; i < len(width); i++ {
-		width[i] = colWidth
+func visibleRange(offset int, visible int, total int) (int, int) {
+	if total <= 0 || visible <= 0 {
+		return 0, 0
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= total {
+		offset = total - 1
 	}
 
-	row := make([]string, 0, len(m.days)+1)
+	end := offset + visible
+	if end > total {
+		end = total
+	}
+
+	return offset, end
+}
+
+func tableCellValue(value string, width int) string {
+	return truncateLabel(value, width)
+}
+
+func (m AppModel) renderTable(b *strings.Builder) {
+	month := time.Time(m.now).Month().String()
+
+	visibleDays := m.visibleDayCount()
+	visibleHabits := m.visibleHabitCount()
+	dayStart, dayEnd := visibleRange(m.colOffset, visibleDays, len(m.days))
+	habitStart, habitEnd := visibleRange(m.rowOffset, visibleHabits, len(m.habits))
+
+	width := make([]int, dayEnd-dayStart+1)
+	width[0] = tableFirstColWidth
+	for i := 1; i < len(width); i++ {
+		width[i] = tableDayColWidth
+	}
+
+	row := make([]string, 0, len(width))
 	row = append(row, month)
-	for _, d := range m.days {
+	for _, d := range m.days[dayStart:dayEnd] {
 		row = append(row, strconv.Itoa(d))
 	}
 
@@ -404,11 +577,12 @@ func (m AppModel) renderTable(b *strings.Builder) {
 	b.WriteString(rowTable(row, width))
 	b.WriteString(borderTable(width))
 
-	for i, v := range m.habits {
-		habitRow := make([]string, len(m.days)+1)
-		habitRow[0] = v.Name
+	for i := habitStart; i < habitEnd; i++ {
+		v := m.habits[i]
+		habitRow := make([]string, len(width))
+		habitRow[0] = tableCellValue(v.Name, tableFirstColWidth)
 
-		for col, day := range m.days {
+		for col, day := range m.days[dayStart:dayEnd] {
 			currentDate := time.Date(
 				m.now.Year(),
 				m.now.Month(),
@@ -424,17 +598,21 @@ func (m AppModel) renderTable(b *strings.Builder) {
 			}
 
 			if entry != nil && entry.Value != 0 {
-				habitRow[col+1] = strconv.FormatFloat(entry.Value, 'f', -1, 64)
+				value := strconv.FormatFloat(entry.Value, 'f', -1, 64)
+				habitRow[col+1] = tableCellValue(value, tableDayColWidth)
 			}
 		}
 
 		if m.cursorRow == i && m.currentFocus == tableFocus {
-			focusedCol := m.cursorCol + 1
+			focusedCol := m.cursorCol - dayStart + 1
 			focusedValue := habitRow[focusedCol]
 			if m.editTable {
 				focusedValue = m.currentEntryValue
 			}
-			habitRow[focusedCol] = focusedTableCell(focusedValue, width[focusedCol])
+			habitRow[focusedCol] = focusedTableCell(
+				tableCellValue(focusedValue, width[focusedCol]),
+				width[focusedCol],
+			)
 		}
 
 		b.WriteString(rowTable(habitRow, width))
@@ -483,6 +661,27 @@ func (m AppModel) renderButtons() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, buttons...)
 }
 
+func (m AppModel) tableScrollStatus() string {
+	if len(m.habits) == 0 || len(m.days) == 0 {
+		return ""
+	}
+
+	visibleRows := m.visibleHabitCount()
+	visibleCols := m.visibleDayCount()
+	rowStart, rowEnd := visibleRange(m.rowOffset, visibleRows, len(m.habits))
+	colStart, colEnd := visibleRange(m.colOffset, visibleCols, len(m.days))
+
+	return fmt.Sprintf(
+		"Rows %d-%d/%d Days %d-%d/%d",
+		rowStart+1,
+		rowEnd,
+		len(m.habits),
+		colStart+1,
+		colEnd,
+		len(m.days),
+	)
+}
+
 func (m AppModel) View() tea.View {
 	var b strings.Builder
 
@@ -491,7 +690,18 @@ func (m AppModel) View() tea.View {
 	b.WriteString(m.renderButtons())
 	b.WriteString("\n")
 	m.renderTable(&b)
-	b.WriteString(fmt.Sprintf("\n %v", m.err))
+
+	status := m.tableScrollStatus()
+	if m.err != "" {
+		if status != "" {
+			status += " | "
+		}
+		status += m.err
+	}
+	if status != "" {
+		b.WriteString("\n ")
+		b.WriteString(status)
+	}
 
 	return tea.NewView(b.String())
 }

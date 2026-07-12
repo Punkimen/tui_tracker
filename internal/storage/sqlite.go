@@ -51,15 +51,23 @@ func (db *SqliteDB) SaveHabit(h model.Habit) (int64, error) {
 	return res.LastInsertId()
 }
 
-func (db *SqliteDB) GetHabits() ([]model.Habit, error) {
-	rows, err := db.db.Query(`SELECT id, name, 
-  type, goal, start_date, end_date, created_at 
-  FROM habits`)
+func (db *SqliteDB) GetHabits(date time.Time) ([]model.Habit, error) {
+	nextMonth := date.AddDate(0, 1, 0)
+	rows, err := db.db.Query(`
+                SELECT id, name, type, goal, start_date, end_date, created_at
+                FROM habits
+                WHERE start_date < ?
+                  AND (end_date IS NULL OR end_date >= ?)
+                ORDER BY id
+        `,
+		nextMonth.Format("2006-01-02"),
+		date.Format("2006-01-02"),
+	)
 	if err != nil {
 		return nil, err
 	}
 	// defer - вызывает участок кода, после завершения функции, очень удобно
-	//	defer rows.Close()
+	// defer rows.Close()
 	defer func() {
 		if err := rows.Close(); err != nil {
 			_ = err
@@ -96,13 +104,69 @@ func (db *SqliteDB) GetHabits() ([]model.Habit, error) {
 			habit.EndDate = &t
 		}
 
-		habit.StartDate, _ = time.Parse("2006-01-02", startDate)
-		habit.CreatedAt, _ = time.Parse("2006-01-02", createdAt)
-
+		habit.StartDate, err = time.Parse("2006-01-02", startDate)
+		if err != nil {
+			return nil, err
+		}
+		habit.CreatedAt, err = time.Parse("2006-01-02", createdAt)
+		if err != nil {
+			return nil, err
+		}
 		habits = append(habits, habit)
-
 	}
 	return habits, rows.Err()
+}
+
+func (db *SqliteDB) GetHabitByID(id int64) (model.Habit, error) {
+	var habit model.Habit
+	var goal sql.NullFloat64
+	var endDate sql.NullString
+	var startDate, createdAt string
+
+	rows, err := db.db.Query(`
+	SELECT id, name, type, goal, start_date, end_date, created_at
+	FROM habits
+	WHERE id = ?
+	`, id)
+	if err != nil {
+		return model.Habit{}, err
+	}
+	for rows.Next() {
+		err := rows.Scan(
+			&habit.ID,
+			&habit.Name,
+			&habit.Type,
+			&goal,
+			&startDate,
+			&endDate,
+			&createdAt,
+		)
+		if err != nil {
+			return model.Habit{}, err
+		}
+		if goal.Valid {
+			habit.Goal = &goal.Float64
+		}
+		if endDate.Valid {
+			t, err := time.Parse("2006-01-02", endDate.String)
+			if err != nil {
+				return model.Habit{}, err
+			}
+			habit.EndDate = &t
+		}
+
+		habit.StartDate, err = time.Parse("2006-01-02", startDate)
+		if err != nil {
+			return model.Habit{}, err
+		}
+
+		habit.CreatedAt, err = time.Parse("2006-01-02", createdAt)
+		if err != nil {
+			return model.Habit{}, err
+		}
+
+	}
+	return habit, nil
 }
 
 func (db *SqliteDB) UpdateHabit(h model.Habit) (model.Habit, error) {
@@ -191,8 +255,17 @@ func (db *SqliteDB) SaveEntry(entry model.Entry) error {
 	return err
 }
 
-func (db *SqliteDB) GetEntries() ([]model.Entry, error) {
-	rows, err := db.db.Query(`SELECT id, habit_id, date, value FROM entries`)
+func (db *SqliteDB) GetEntries(date time.Time) ([]model.Entry, error) {
+	startDate := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+	nextMonth := startDate.AddDate(0, 1, 0)
+	rows, err := db.db.Query(`
+	SELECT id, habit_id, date, value
+	FROM entries
+	WHERE date >= ? AND date < ?
+	`,
+		startDate.Format("2006-01-02"),
+		nextMonth.Format("2006-01-02"),
+	)
 	if err != nil {
 		return nil, err
 	}

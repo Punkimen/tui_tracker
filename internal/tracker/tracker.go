@@ -51,33 +51,8 @@ func (t *Tracker) AddHabit(
 }
 
 // GetHabits возвращает все привычки из хранилища.
-func (t *Tracker) GetHabits() ([]model.Habit, error) {
-	return t.storage.GetHabits()
-}
-
-// GetActiveHabits возвращает только привычки активные в указанном месяце.
-// Фильтрация происходит здесь, а не в SQL — логика принадлежит tracker, не storage.
-func (t *Tracker) GetActiveHabits(year int, month time.Month) ([]model.Habit, error) {
-	habits, err := t.storage.GetHabits()
-	if err != nil {
-		return nil, err
-	}
-
-	first := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
-	last := first.AddDate(0, 1, -1)
-
-	var active []model.Habit
-	for _, h := range habits {
-		if h.StartDate.After(last) {
-			continue
-		}
-		if h.EndDate != nil && h.EndDate.Before(first) {
-			continue
-		}
-		active = append(active, h)
-	}
-
-	return active, nil
+func (t *Tracker) GetHabits(date time.Time) ([]model.Habit, error) {
+	return t.storage.GetHabits(date)
 }
 
 func (t *Tracker) UpdateHabit(
@@ -105,23 +80,14 @@ func (t *Tracker) UpdateHabit(
 		return model.Habit{}, errors.New("storage does not support habit update")
 	}
 
-	habits, err := t.storage.GetHabits()
+	habit, err := t.storage.GetHabitByID(id)
 	if err != nil {
 		return model.Habit{}, err
 	}
+	habit.Name = name
+	habit.Type = habitType
 
-	for _, habit := range habits {
-		if habit.ID != id {
-			continue
-		}
-
-		habit.Name = name
-		habit.Type = habitType
-
-		return updater.UpdateHabit(habit)
-	}
-
-	return model.Habit{}, errors.New("habit not found")
+	return updater.UpdateHabit(habit)
 }
 
 // ArchiveHabit устанавливает дату окончания привычки — она перестаёт отображаться в новых месяцах.
@@ -135,8 +101,8 @@ func (t *Tracker) DeleteHabit(id int64) error {
 	return t.storage.DeleteHabit(id)
 }
 
-func (t *Tracker) GetAllEntries() ([]model.Entry, error) {
-	entries, err := t.storage.GetEntries()
+func (t *Tracker) GetEntries(date time.Time) ([]model.Entry, error) {
+	entries, err := t.storage.GetEntries(date)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +112,7 @@ func (t *Tracker) GetAllEntries() ([]model.Entry, error) {
 
 // GetEntryByCurrentDate получает entry по конкретной дате
 func (t *Tracker) GetEntryByCurrentDate(habitID int64, date time.Time) (*model.Entry, error) {
-	entries, err := t.storage.GetEntries()
+	entries, err := t.storage.GetEntries(date)
 	if err != nil {
 		return nil, err
 	}

@@ -26,7 +26,7 @@ type habitsData struct {
 
 func (m AppModel) loadHabits() tea.Cmd {
 	return func() tea.Msg {
-		habits, err := m.tracker.GetActiveHabits(m.now.Year(), m.now.Month())
+		habits, err := m.tracker.GetHabits(m.now)
 		if err != nil {
 			return mainData{}
 		}

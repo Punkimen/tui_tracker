@@ -56,3 +56,10 @@ var ModalTitleStyle = lipgloss.NewStyle().
 	Bold(true).
 	Foreground(lipgloss.Color("#F9E65C")).
 	MarginBottom(1)
+
+var NavigationHintStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#7C8A99"))
+
+var NavigationHintKeyStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(lipgloss.Color("#F9E65C"))

@@ -247,5 +247,23 @@ func (f FormModel) View() tea.View {
 		b.WriteString(f.err)
 	}
 
+	b.WriteString("\n\n")
+	if f.focus == field && f.editField {
+		b.WriteString(renderNavigationHints(
+			navigationHint{"enter", "подтвердить"},
+			navigationHint{"esc", "отменить"},
+		))
+	} else {
+		b.WriteString(renderNavigationHints(
+			navigationHint{"enter", "выбрать"},
+			navigationHint{"left", "влево"},
+			navigationHint{"right", "вправо"},
+			navigationHint{"down", "вниз"},
+			navigationHint{"up", "вверх"},
+			navigationHint{"esc", "назад"},
+			navigationHint{"q", "выйти"},
+		))
+	}
+
 	return tea.NewView(b.String())
 }

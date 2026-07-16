@@ -583,10 +583,11 @@ func (m AppModel) renderTable(b *strings.Builder) {
 		habitValue := TableCellFocusStyle.Width(width[0]).Render(v.Name)
 
 		if m.cursorRow == i && m.currentFocus == tableFocus {
-		 habitValue = TableCellFocusStyle.Width(width[0]).Render(v.Name)
-		}else{
+			habitValue = TableCellFocusStyle.Width(width[0]).Render(v.Name)
+		} else {
 			habitValue = v.Name
 		}
+
 		habitRow[0] = tableCellValue(habitValue, tableFirstColWidth)
 		for col, day := range m.days[dayStart:dayEnd] {
 			currentDate := time.Date(
@@ -707,6 +708,23 @@ func (m AppModel) View() tea.View {
 	if status != "" {
 		b.WriteString("\n ")
 		b.WriteString(status)
+	}
+
+	b.WriteString("\n\n")
+	if m.editTable {
+		b.WriteString(renderNavigationHints(
+			navigationHint{"enter", "сохранить"},
+			navigationHint{"esc", "отменить"},
+		))
+	} else {
+		b.WriteString(renderNavigationHints(
+			navigationHint{"enter", "выбрать"},
+			navigationHint{"h/left", "влево"},
+			navigationHint{"l/right", "вправо"},
+			navigationHint{"j/down", "вниз"},
+			navigationHint{"k/up", "вверх"},
+			navigationHint{"q", "выйти"},
+		))
 	}
 
 	return tea.NewView(b.String())

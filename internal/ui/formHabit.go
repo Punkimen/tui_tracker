@@ -201,7 +201,13 @@ func (f FormHabitModel) View() tea.View {
 	var b strings.Builder
 
 	if len(f.habits) == 0 {
-		return tea.NewView("No habits")
+		b.WriteString("No habits")
+		b.WriteString("\n\n")
+		b.WriteString(renderNavigationHints(
+			navigationHint{"esc", "назад"},
+			navigationHint{"q", "выйти"},
+		))
+		return tea.NewView(b.String())
 	}
 
 	columns := f.gridColumns()
@@ -224,6 +230,17 @@ func (f FormHabitModel) View() tea.View {
 		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, row...))
 		b.WriteString("\n")
 	}
+
+	b.WriteString("\n")
+	b.WriteString(renderNavigationHints(
+		navigationHint{"enter", "выбрать"},
+		navigationHint{"h/left", "влево"},
+		navigationHint{"l/right", "вправо"},
+		navigationHint{"j/down", "вниз"},
+		navigationHint{"k/up", "вверх"},
+		navigationHint{"esc", "назад"},
+		navigationHint{"q", "выйти"},
+	))
 
 	return tea.NewView(b.String())
 }

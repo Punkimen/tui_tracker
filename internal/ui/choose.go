@@ -99,6 +99,14 @@ func (c ChoosenModel) renderModal() string {
 	}
 
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, buttons...))
+	b.WriteString("\n\n")
+	b.WriteString(renderNavigationHints(
+		navigationHint{"enter", "выбрать"},
+		navigationHint{"h/left", "влево"},
+		navigationHint{"l/right", "вправо"},
+		navigationHint{"esc", "назад"},
+		navigationHint{"q", "выйти"},
+	))
 	return ModalStyle.Render(b.String())
 }
 

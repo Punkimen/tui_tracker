@@ -231,6 +231,25 @@ func (db *SqliteDB) UpdateHabit(h model.Habit) (model.Habit, error) {
 	return habit, nil
 }
 
+func (db *SqliteDB) HasHabitByDate(date time.Time) (bool, error) {
+	monthStart := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+	nextMonth := monthStart.AddDate(0, 1, 0)
+	var exist bool
+
+	row := db.db.QueryRow(
+		`SELECT EXISTS(
+		SELECT	1
+		FROM habits
+		WHERE start_date < ? AND (end_date IS NULL OR end_date >= ?)
+		LIMIT 1)
+		`,
+		nextMonth.Format("2006-01-02"), monthStart.Format("2006-01-02"),
+	)
+
+	err := row.Scan(&exist)
+	return exist, err
+}
+
 func (db *SqliteDB) DeleteHabit(id int64) error {
 	_, err := db.db.Exec(`DELETE FROM habits WHERE id = ?`, id)
 	return err

@@ -14,6 +14,7 @@ type Storage interface {
 	UpdateHabit(h model.Habit) (model.Habit, error)
 	DeleteHabit(id int64) error
 	HabitEndDate(id int64, date time.Time) error
+	HasHabitByDate(date time.Time) (bool, error)
 
 	SaveEntry(e model.Entry) error
 	GetEntries(date time.Time) ([]model.Entry, error)

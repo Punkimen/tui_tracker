@@ -54,8 +54,8 @@ type AppModel struct {
 	habits []model.Habit
 	entry  []model.Entry
 
-	now  time.Time
-	days []int
+	currentDate time.Time
+	days        []int
 
 	buttons        []buttonType
 	buttonPosition int
@@ -89,7 +89,7 @@ func CreateApp(t *tracker.Tracker) AppModel {
 		currentScreen:  appScreen,
 		currentFocus:   buttonsFocus,
 		buttonPosition: 0,
-		now:            now,
+		currentDate:    now,
 		days:           days,
 		cursorCol:      now.Day() - 1,
 	}
@@ -98,7 +98,7 @@ func CreateApp(t *tracker.Tracker) AppModel {
 }
 
 func (m *AppModel) InitButtons() {
-	buttons := make([]buttonType, 2)
+	buttons := make([]buttonType, 4)
 	buttons[0] = buttonType{
 		label: "Create Habit",
 		style: ButtonPrimaryStyle,
@@ -125,6 +125,46 @@ func (m *AppModel) InitButtons() {
 			}, nil
 		},
 	}
+
+	buttons[2] = buttonType{
+		label: "←",
+		style: ButtonSecondaryStyle,
+		onSelect: func(app AppModel) (tea.Model, tea.Cmd) {
+			app.currentDate = app.currentDate.AddDate(0, -1, 0)
+			lastDay := time.Date(
+				app.currentDate.Year(),
+				app.currentDate.Month()+1,
+				0, 0, 0, 0, 0,
+				app.currentDate.Location(),
+			).Day()
+			app.days = make([]int, lastDay)
+			for i := range app.days {
+				app.days[i] = i + 1
+			}
+
+			return app, app.loadData()
+		},
+	}
+	buttons[3] = buttonType{
+		label: "→",
+		style: ButtonSecondaryStyle,
+		onSelect: func(app AppModel) (tea.Model, tea.Cmd) {
+			app.currentDate = app.currentDate.AddDate(0, 1, 0)
+			lastDay := time.Date(
+				app.currentDate.Year(),
+				app.currentDate.Month()+1,
+				0, 0, 0, 0, 0,
+				app.currentDate.Location(),
+			).Day()
+			app.days = make([]int, lastDay)
+			for i := range app.days {
+				app.days[i] = i + 1
+			}
+
+			return app, app.loadData()
+		},
+	}
+
 	m.buttons = buttons
 }
 
@@ -135,11 +175,11 @@ type mainData struct {
 
 func (m AppModel) loadData() tea.Cmd {
 	return func() tea.Msg {
-		habits, err := m.tracker.GetHabits(m.now)
+		habits, err := m.tracker.GetHabits(m.currentDate)
 		if err != nil {
 			return mainData{}
 		}
-		entries, err := m.tracker.GetEntries(m.now)
+		entries, err := m.tracker.GetEntries(m.currentDate)
 		if err != nil {
 			return mainData{}
 		}
@@ -157,7 +197,16 @@ func (m AppModel) Init() tea.Cmd {
 func (m AppModel) updateHabit() (tea.Model, tea.Cmd) {
 	day := m.days[m.cursorCol]
 	habitID := m.habits[m.cursorRow].ID
-	currentEntryDate := time.Date(m.now.Year(), m.now.Month(), day, 0, 0, 0, 0, m.now.Location())
+	currentEntryDate := time.Date(
+		m.currentDate.Year(),
+		m.currentDate.Month(),
+		day,
+		0,
+		0,
+		0,
+		0,
+		m.currentDate.Location(),
+	)
 	value, err := strconv.ParseFloat(strings.TrimSpace(m.currentEntryValue), 64)
 	if err != nil {
 		m.err = "Error with value"
@@ -411,14 +460,14 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				day := m.days[m.cursorCol]
 
 				currentEntryDate := time.Date(
-					m.now.Year(),
-					m.now.Month(),
+					m.currentDate.Year(),
+					m.currentDate.Month(),
 					day,
 					0,
 					0,
 					0,
 					0,
-					m.now.Location(),
+					m.currentDate.Location(),
 				)
 
 				entry, err := m.tracker.GetEntryByCurrentDate(habitID, currentEntryDate)
@@ -554,8 +603,8 @@ func tableCellValue(value string, width int) string {
 }
 
 func (m AppModel) renderTable(b *strings.Builder) {
-	month := time.Time(m.now).Month().String()
-
+	// month := time.Time(m.currentDate).Month().String()
+	dateString := time.Time(m.currentDate).Format("Jan 2006")
 	visibleDays := m.visibleDayCount()
 	visibleHabits := m.visibleHabitCount()
 	dayStart, dayEnd := visibleRange(m.colOffset, visibleDays, len(m.days))
@@ -568,7 +617,7 @@ func (m AppModel) renderTable(b *strings.Builder) {
 	}
 
 	row := make([]string, 0, len(width))
-	row = append(row, month)
+	row = append(row, dateString)
 	for _, d := range m.days[dayStart:dayEnd] {
 		row = append(row, strconv.Itoa(d))
 	}
@@ -591,11 +640,11 @@ func (m AppModel) renderTable(b *strings.Builder) {
 		habitRow[0] = tableCellValue(habitValue, tableFirstColWidth)
 		for col, day := range m.days[dayStart:dayEnd] {
 			currentDate := time.Date(
-				m.now.Year(),
-				m.now.Month(),
+				m.currentDate.Year(),
+				m.currentDate.Month(),
 				day,
 				0, 0, 0, 0,
-				m.now.Location(),
+				m.currentDate.Location(),
 			)
 
 			entry, err := m.tracker.GetEntryByCurrentDate(v.ID, currentDate)
@@ -726,6 +775,10 @@ func (m AppModel) View() tea.View {
 			navigationHint{"q", "выйти"},
 		))
 	}
+	if len(m.habits) > 0 {
+		b.WriteString(fmt.Sprintf("%v", m.habits[0].StartDate))
+	}
+	b.WriteString(fmt.Sprintf("%v", m.currentDate))
 
 	return tea.NewView(b.String())
 }

@@ -52,8 +52,10 @@ func (db *SqliteDB) SaveHabit(h model.Habit) (int64, error) {
 }
 
 func (db *SqliteDB) GetHabits(date time.Time) ([]model.Habit, error) {
-	nextMonth := date.AddDate(0, 1, 0)
-	rows, err := db.db.Query(`
+	startMonth := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+	nextMonth := startMonth.AddDate(0, 1, 0)
+	rows, err := db.db.Query(
+		`
                 SELECT id, name, type, goal, start_date, end_date, created_at
                 FROM habits
                 WHERE start_date < ?
@@ -277,7 +279,8 @@ func (db *SqliteDB) SaveEntry(entry model.Entry) error {
 func (db *SqliteDB) GetEntries(date time.Time) ([]model.Entry, error) {
 	startDate := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
 	nextMonth := startDate.AddDate(0, 1, 0)
-	rows, err := db.db.Query(`
+	rows, err := db.db.Query(
+		`
 	SELECT id, habit_id, date, value
 	FROM entries
 	WHERE date >= ? AND date < ?

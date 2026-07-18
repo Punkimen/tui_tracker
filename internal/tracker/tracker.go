@@ -90,6 +90,11 @@ func (t *Tracker) UpdateHabit(
 	return updater.UpdateHabit(habit)
 }
 
+// HasHabitByDate проверяет есть ли привычке за переданный месяц
+func (t *Tracker) HasHabitByDate(date time.Time) (bool, error) {
+	return t.storage.HasHabitByDate(date)
+}
+
 // ArchiveHabit устанавливает дату окончания привычки — она перестаёт отображаться в новых месяцах.
 func (t *Tracker) ArchiveHabit(id int64) error {
 	now := time.Now()

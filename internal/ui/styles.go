@@ -47,6 +47,10 @@ var TableCellFocusStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#27DDF5")).
 	Align(lipgloss.Center)
 
+var TableCellDisabled = lipgloss.NewStyle().
+	Bold(true).
+	Background(lipgloss.Color("#3d3d3d"))
+
 var ModalStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(lipgloss.Color("#27DDF5")).
@@ -63,3 +67,6 @@ var NavigationHintStyle = lipgloss.NewStyle().
 var NavigationHintKeyStyle = lipgloss.NewStyle().
 	Bold(true).
 	Foreground(lipgloss.Color("#F9E65C"))
+
+var ErrorHintStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#ba1b21"))

@@ -2,7 +2,6 @@
 package ui
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -197,6 +196,8 @@ func (m AppModel) Init() tea.Cmd {
 func (m AppModel) updateHabit() (tea.Model, tea.Cmd) {
 	day := m.days[m.cursorCol]
 	habitID := m.habits[m.cursorRow].ID
+	habbitEndDate := m.habits[m.cursorRow].EndDate
+
 	currentEntryDate := time.Date(
 		m.currentDate.Year(),
 		m.currentDate.Month(),
@@ -207,6 +208,13 @@ func (m AppModel) updateHabit() (tea.Model, tea.Cmd) {
 		0,
 		m.currentDate.Location(),
 	)
+
+	if habbitEndDate != nil &&
+		currentEntryDate.Format("2006-01-02") > habbitEndDate.Format("2006-01-02") {
+		m.err = "You finish this Habit"
+		return m, nil
+	}
+
 	value, err := strconv.ParseFloat(strings.TrimSpace(m.currentEntryValue), 64)
 	if err != nil {
 		m.err = "Error with value"
@@ -455,20 +463,28 @@ func (m AppModel) navigationUpdate(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 
 			habitType := m.habits[m.cursorRow].Type
+			habbitEndDate := m.habits[m.cursorRow].EndDate
+			day := m.days[m.cursorCol]
+
+			currentEntryDate := time.Date(
+				m.currentDate.Year(),
+				m.currentDate.Month(),
+				day,
+				0,
+				0,
+				0,
+				0,
+				m.currentDate.Location(),
+			)
+
+			if habbitEndDate != nil &&
+				currentEntryDate.Format("2006-01-02") > habbitEndDate.Format("2006-01-02") {
+				m.err = "You finish this Habit"
+				return m, nil
+			}
+
 			if habitType == "count" {
 				habitID := m.habits[m.cursorRow].ID
-				day := m.days[m.cursorCol]
-
-				currentEntryDate := time.Date(
-					m.currentDate.Year(),
-					m.currentDate.Month(),
-					day,
-					0,
-					0,
-					0,
-					0,
-					m.currentDate.Location(),
-				)
 
 				entry, err := m.tracker.GetEntryByCurrentDate(habitID, currentEntryDate)
 				if err != nil {
@@ -630,6 +646,7 @@ func (m AppModel) renderTable(b *strings.Builder) {
 		v := m.habits[i]
 		habitRow := make([]string, len(width))
 		habitValue := TableCellFocusStyle.Width(width[0]).Render(v.Name)
+		habitEndDate := v.EndDate
 
 		if m.cursorRow == i && m.currentFocus == tableFocus {
 			habitValue = TableCellFocusStyle.Width(width[0]).Render(v.Name)
@@ -646,6 +663,11 @@ func (m AppModel) renderTable(b *strings.Builder) {
 				0, 0, 0, 0,
 				m.currentDate.Location(),
 			)
+
+			if habitEndDate != nil &&
+				currentDate.Format("2006-01-02") > habitEndDate.Format("2006-01-02") {
+				habitRow[col+1] = TableCellDisabled.Width(tableDayColWidth).Render("")
+			}
 
 			entry, err := m.tracker.GetEntryByCurrentDate(v.ID, currentDate)
 			if err != nil {
@@ -717,27 +739,6 @@ func (m AppModel) renderButtons() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, buttons...)
 }
 
-func (m AppModel) tableScrollStatus() string {
-	if len(m.habits) == 0 || len(m.days) == 0 {
-		return ""
-	}
-
-	visibleRows := m.visibleHabitCount()
-	visibleCols := m.visibleDayCount()
-	rowStart, rowEnd := visibleRange(m.rowOffset, visibleRows, len(m.habits))
-	colStart, colEnd := visibleRange(m.colOffset, visibleCols, len(m.days))
-
-	return fmt.Sprintf(
-		"Rows %d-%d/%d Days %d-%d/%d",
-		rowStart+1,
-		rowEnd,
-		len(m.habits),
-		colStart+1,
-		colEnd,
-		len(m.days),
-	)
-}
-
 func (m AppModel) View() tea.View {
 	var b strings.Builder
 
@@ -747,16 +748,9 @@ func (m AppModel) View() tea.View {
 	b.WriteString("\n")
 	m.renderTable(&b)
 
-	status := m.tableScrollStatus()
 	if m.err != "" {
-		if status != "" {
-			status += " | "
-		}
-		status += m.err
-	}
-	if status != "" {
 		b.WriteString("\n ")
-		b.WriteString(status)
+		b.WriteString(ErrorHintStyle.Render(m.err))
 	}
 
 	b.WriteString("\n\n")
@@ -775,10 +769,6 @@ func (m AppModel) View() tea.View {
 			navigationHint{"q", "выйти"},
 		))
 	}
-	if len(m.habits) > 0 {
-		b.WriteString(fmt.Sprintf("%v", m.habits[0].StartDate))
-	}
-	b.WriteString(fmt.Sprintf("%v", m.currentDate))
 
 	return tea.NewView(b.String())
 }

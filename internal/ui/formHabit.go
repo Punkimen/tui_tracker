@@ -113,6 +113,17 @@ func (f FormHabitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							return f, f.app.loadHabits()
 						},
 					},
+					{
+						label: "Finish Habit",
+						onSelect: func() (tea.Model, tea.Cmd) {
+							err := f.t.ArchiveHabit(currentHabbit.ID)
+							if err != nil {
+								return f, nil
+							}
+
+							return f, f.app.loadData()
+						},
+					},
 				},
 			}, nil
 		case "q":

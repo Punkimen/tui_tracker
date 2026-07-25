@@ -125,11 +125,11 @@ func (f FormHabitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						},
 					},
 				},
-			}, nil
+			}, f.app.loadData()
 		case "q":
 			return f, tea.Quit
 		case "esc":
-			return f.app, nil
+			return f.app, f.app.loadData()
 		case "up", "k":
 			if f.cursorHabit-columns >= 0 {
 				f.cursorHabit -= columns

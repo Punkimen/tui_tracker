@@ -55,8 +55,36 @@ go mod download
 go run ./cmd/tracker
 ```
 
-После запуска в текущей папке автоматически создастся файл `tracker.db`, если
-его еще нет. В нем будут храниться привычки и ежедневные записи.
+После запуска файл `tracker.db` автоматически создаётся в папке конфигурации
+пользователя: `%AppData%\\daily-tracker` в Windows и обычно
+`~/.config/daily-tracker` в Linux. В нём хранятся привычки и ежедневные записи.
+
+## Релиз для Linux и Windows
+
+При создании тега вида `v*` GitHub Actions запускает тесты, собирает готовые
+архивы и создаёт GitHub Release с двумя файлами:
+
+- `daily-tracker_linux_amd64.tar.gz` — для Linux x86_64;
+- `daily-tracker_windows_amd64.zip` — для Windows x64.
+
+Чтобы выпустить новую версию, закоммитьте изменения и отправьте тег в GitHub:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Готовые файлы появятся во вкладке **Releases** репозитория. На Linux распакуйте
+архив и запустите `./daily-tracker`; на Windows распакуйте ZIP и запустите
+`daily-tracker.exe` из PowerShell или `cmd`.
+
+Для локальной проверки релизной сборки выполните:
+
+```bash
+mkdir -p dist
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/daily-tracker ./cmd/tracker
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o dist/daily-tracker.exe ./cmd/tracker
+```
 
 ## Сборка исполняемого файла
 
@@ -109,8 +137,9 @@ go.mod                     описание Go-модуля и зависимо�
 
 ## Данные приложения
 
-Все данные сохраняются локально в файле `tracker.db` рядом с местом запуска
-приложения.
+Все данные сохраняются локально в файле `tracker.db` в папке конфигурации
+пользователя: `%AppData%\\daily-tracker` в Windows и обычно
+`~/.config/daily-tracker` в Linux.
 
 Если нужно начать с пустой базы, остановите приложение и удалите файл
 `tracker.db`. При следующем запуске база будет создана заново.

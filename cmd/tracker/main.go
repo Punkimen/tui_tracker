@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -12,8 +13,27 @@ import (
 	"daily-tracker/internal/ui"
 )
 
+func dataBasePath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	dir = filepath.Join(dir, "daily-tracker")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+
+	return filepath.Join(dir, "tracker.db"), nil
+}
+
 func main() {
-	db, err := storage.New("tracker.db")
+	path, err := dataBasePath()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db, err := storage.New(path)
 	if err != nil {
 		log.Fatal(err)
 	}

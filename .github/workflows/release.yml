@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test ./...
+      - name: Build Linux archive
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          mkdir -p dist/daily-tracker_linux_amd64
+          go build -trimpath -ldflags="-s -w" -o dist/daily-tracker_linux_amd64/daily-tracker ./cmd/tracker
+          tar -C dist -czf dist/daily-tracker_linux_amd64.tar.gz daily-tracker_linux_amd64
+      - name: Build Windows archive
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          mkdir -p dist/daily-tracker_windows_amd64
+          go build -trimpath -ldflags="-s -w" -o dist/daily-tracker_windows_amd64/daily-tracker.exe ./cmd/tracker
+          cd dist && zip -r daily-tracker_windows_amd64.zip daily-tracker_windows_amd64
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          --generate-notes
+          dist/daily-tracker_linux_amd64.tar.gz
+          dist/daily-tracker_windows_amd64.zip
